@@ -1,0 +1,3 @@
+[default]
+description = "No direct frontend commands. The app host owns receipt access."
+permissions = []

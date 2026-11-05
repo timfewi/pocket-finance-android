@@ -1,0 +1,15 @@
+[package]
+name = "pocket-category-provider"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Optional category suggestion boundary; public builds work without a model"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt"] }

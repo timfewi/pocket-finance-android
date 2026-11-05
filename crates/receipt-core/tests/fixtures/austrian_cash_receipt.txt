@@ -1,0 +1,12 @@
+SYNTHETIC DONAU MARKT
+Beispielgasse 10
+1010 Wien
+Datum 04.11.2026
+Brot 2,49
+Gemüse 10,00
+Zwischensumme 14,49
+Rabatt -2,00
+SUMME EUR 12,49
+BAR GEGEBEN 20,00
+RÜCKGELD 7,51
+Vielen Dank

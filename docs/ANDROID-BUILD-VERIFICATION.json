@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "verified_on": "2026-11-05",
+  "platform": "Linux x86-64 host cross-compiling Android arm64-v8a",
+  "artifacts": [
+    {
+      "path": "artifacts/apk/public/pocket-finance-public-arm64-debug.apk",
+      "size_bytes": 168747978,
+      "sha256": "b5825b6df49e8185ff7441ec0d01c318a3dd941dbd6058214011bbe916d71083",
+      "signature": "Android development key; v2 signature verified",
+      "build_command": "scripts/android-env.sh npm run tauri -- android build --debug --target aarch64 --apk --ci"
+    },
+    {
+      "path": "artifacts/apk/public/pocket-finance-public-arm64-release-unsigned.apk",
+      "size_bytes": 30296079,
+      "sha256": "a1fc4628a7606fb0e60e3d03aa52aadd06ef1de44902e74f69da6449822b438a",
+      "signature": "unsigned; requires release signing",
+      "build_command": "scripts/android-env.sh npm run tauri -- android build --target aarch64 --apk --ci"
+    }
+  ],
+  "public_provider": "crates/category-provider (unavailable fallback, no private dependency)",
+  "toolchain": {
+    "rust": "1.99.1",
+    "tauri_cli": "2.12.4",
+    "tauri_rust": "2.12.5",
+    "jdk": "Temurin 21.0.13+9",
+    "sdk_api": 36,
+    "minimum_api": 24,
+    "build_tools": "36.0.0",
+    "ndk": "29.0.14206865",
+    "gradle": "9.6.1",
+    "android_gradle_plugin": "9.3.1"
+  },
+  "release_audit": {
+    "internet_permission": false,
+    "network_state_permission": false,
+    "allow_backup": false,
+    "full_backup_content": false,
+    "cloud_and_device_transfer_exclusions": true,
+    "receipt_provider": "dev.pocketfinance.receiptcapture.ReceiptFileProvider",
+    "receipt_authority": "io.github.timfewi.pocketfinance.receiptcapture.files",
+    "receipt_provider_exported": false,
+    "receipt_provider_files_path": "receipts/",
+    "latin_model_assets": [
+      "assets/mlkit-google-ocr-models/aksara/aksara_page_layout_analysis_rpn_gcn.binarypb",
+      "assets/mlkit-google-ocr-models/aksara/aksara_page_layout_analysis_ti_rpn_gcn.binarypb",
+      "assets/mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc/optical/assets.extra/LabelMap.pb",
+      "assets/mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc/optical/conv_model.fb",
+      "assets/mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc/optical/lstm_model.fb",
+      "assets/mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc_cpu.binarypb",
+      "assets/mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/tflite_langid.tflite",
+      "assets/mlkit-google-ocr-models/gocr/layout/line_clustering_custom_ops/model.tflite",
+      "assets/mlkit-google-ocr-models/gocr/layout/line_splitting_custom_ops/model.tflite",
+      "assets/mlkit-google-ocr-models/taser/detector/region_proposal_text_detector_tflite_vertical_mbv2_v1.bincfg",
+      "assets/mlkit-google-ocr-models/taser/detector/rpn_text_detector_mobile_space_to_depth_quantized_mbv2_v1.tflite",
+      "assets/mlkit-google-ocr-models/taser/rpn_text_detection_tflite_mobile_mbv2.binarypb",
+      "assets/mlkit-google-ocr-models/taser/segmenter/tflite_script_detector_0.3.bincfg",
+      "assets/mlkit-google-ocr-models/taser/segmenter/tflite_script_detector_0.3.conv_model",
+      "assets/mlkit-google-ocr-models/taser/segmenter/tflite_script_detector_0.3.lstm_model",
+      "assets/mlkit-google-ocr-models/taser/taser_script_identification_tflite_mobile.binarypb",
+      "assets/mlkit-google-ocr-models/taser_tflite_gocrlatin_mbv2_scriptid_aksara_layout_gcn_mobile_engine.binarypb",
+      "assets/mlkit-google-ocr-models/taser_tflite_gocrlatin_mbv2_scriptid_aksara_layout_gcn_mobile_engine_ti.binarypb",
+      "assets/mlkit-google-ocr-models/taser_tflite_gocrlatin_mbv2_scriptid_aksara_layout_gcn_mobile_recognizer.binarypb",
+      "assets/mlkit-google-ocr-models/taser_tflite_gocrlatin_mbv2_scriptid_aksara_layout_gcn_mobile_runner.binarypb",
+      "assets/mlkit-google-ocr-models/taser_tflite_gocrlatin_mbv2_scriptid_aksara_layout_gcn_mobile_runner_ti.binarypb"
+    ],
+    "native_libraries": [
+      {
+        "name": "libpocket_finance_android.so",
+        "load_segment_alignment_bytes": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "name": "libmlkit_google_ocr_pipeline.so",
+        "load_segment_alignment_bytes": [
+          16384,
+          16384,
+          16384
+        ]
+      }
+    ],
+    "zip_alignment_16k_verified": true
+  },
+  "debug_audit": {
+    "signature_v2_verified": true,
+    "zip_alignment_16k_verified": true,
+    "network_permission_retained_for_development": true
+  },
+  "native_unit_tests": {
+    "passed": 3,
+    "failed": 0,
+    "command": "scripts/android-env.sh src-tauri/gen/android/gradlew -p src-tauri/gen/android :tauri-plugin-receipt-capture:testDebugUnitTest --no-daemon --max-workers=3"
+  },
+  "physical_device": {
+    "connected_devices": 0,
+    "installation_tested": false,
+    "camera_tested": false,
+    "ocr_execution_tested": false,
+    "seeker_performance_measured": false
+  },
+  "limitations": [
+    "Native packaging and static policy checks do not establish physical-device correctness.",
+    "Release APK is unsigned; debug APK uses a development signing key and contains debug symbols.",
+    "ML Kit Latin models are bundled; camera/picker/airplane-mode behavior needs a synthetic-receipt acceptance run."
+  ],
+  "artifact_path_note": "Artifact entries identify ignored copies archived during verification. A normal checkout builds src-tauri/gen/android/app/build/outputs/apk/universal/{debug,release}/ outputs; APKs are not committed."
+}

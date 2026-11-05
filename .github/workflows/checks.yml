@@ -1,0 +1,24 @@
+name: Public build checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  core-and-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install pinned Rust
+        run: rustup show
+      - name: Check public Rust crates
+        run: |
+          cargo test --locked -p receipt-core
+          cargo test --manifest-path crates/category-provider/Cargo.toml --locked
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build

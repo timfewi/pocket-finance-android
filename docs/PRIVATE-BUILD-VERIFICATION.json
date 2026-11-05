@@ -1,0 +1,31 @@
+{
+  "recordedAt": "2026-11-05T18:41:15.063Z",
+  "variant": "private-provider-debug",
+  "target": "aarch64-linux-android",
+  "provider": {
+    "name": "pocket-category-provider",
+    "version": "0.1.0",
+    "checkout": "local private pocket-finance-agent",
+    "hostResolvesToProvider": true,
+    "desktopGgufBackendEnabled": false,
+    "source_revision": "111936e4b1a276e50ccc550e9412e05cd57c6d15"
+  },
+  "artifact": {
+    "path": "artifacts/apk/private/pocket-finance-private-arm64-debug.apk",
+    "bytes": 177282442,
+    "sha256": "12709abef0326bb018bc02e604b89a83eb695dacb3851d5e8b0547aa3cf84ab8"
+  },
+  "publicLockSha256": "f12a27444d2ffbe2852726c46183b8e1feccc7fdbced05394d85d61d9666b8a0",
+  "buildExitStatus": 0,
+  "command": "CARGO_TARGET_DIR=\"$PWD/artifacts/android-target\" CARGO_BUILD_JOBS=4 scripts/private-agent.sh run scripts/android-env.sh sh -c 'cargo metadata --format-version 1 --filter-platform aarch64-linux-android > artifacts/apk/private/cargo-metadata.json && npm run tauri -- android build --debug --target aarch64 --apk --ci'",
+  "notes": [
+    "JAVA_HOME, ANDROID_HOME and optional Gradle/proxy settings are preconfigured as documented.",
+    "Metadata and native compilation log identify the private package; public lock and APK checksums were unchanged.",
+    "Android provider has no installed native model backend and returns unavailable; no device runtime test performed.",
+    "Deleted only the generated APK output and reran identical debug build flags to avoid obsolete ZIP bytes from incremental packaging.",
+    "Archived private APK is separate from the unchanged public debug/release APKs."
+  ],
+  "repackageExitStatus": 0,
+  "packagedNativeLibrarySha256": "a9a8529c3d9ef4cd371493b980e7024f8f8fbe41d68384b5f54ffa2228e64d48",
+  "apkSignatureVerified": true
+}
