@@ -7,6 +7,11 @@ on:
         description: 'Unused alpha tag, for example v0.1.0-alpha.1 (an existing draft is allowed)'
         required: true
         type: string
+      artifact_run_id:
+        description: 'Optional successful build run to publish without rebuilding (leave empty for a new build)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -17,7 +22,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.artifact_run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -77,25 +82,67 @@ jobs:
 
   publish:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: always() && !cancelled() && github.ref == 'refs/heads/main' && (needs.build.result == 'success' || (inputs.artifact_run_id != '' && needs.build.result == 'skipped'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write
+      actions: read
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.release_tag }}
+      ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id || github.run_id }}
     steps:
+      - name: Validate source workflow and successful build job
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]
+          [[ "$ARTIFACT_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID" > "$RUNNER_TEMP/source-run.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/source-jobs.json"
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const run = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/source-run.json`, 'utf8'));
+          const jobs = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/source-jobs.json`, 'utf8')).flatMap(page => page.jobs);
+          if (String(run.id) !== process.env.ARTIFACT_RUN_ID ||
+              run.head_repository?.full_name !== process.env.GITHUB_REPOSITORY ||
+              run.event !== 'workflow_dispatch' || run.head_branch !== 'main' ||
+              run.path !== '.github/workflows/android-apk.yml' ||
+              !/^[a-f0-9]{40}$/.test(run.head_sha) ||
+              !jobs.some(job => job.name === 'build' && job.conclusion === 'success')) {
+            throw new Error('Artifact source must be this repository/main workflow with a successful build job.');
+          }
+          appendFileSync(process.env.GITHUB_ENV, `SOURCE_COMMIT=${run.head_sha}\n`);
+          NODE
       - uses: actions/download-artifact@v4
         with:
           name: release-bundle
           path: release-bundle
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Upload, verify remote APK, and publish prerelease
         working-directory: release-bundle
         shell: bash
         run: |
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFileSync, statSync } from 'node:fs';
+          const info = JSON.parse(readFileSync('BUILDINFO.json', 'utf8'));
+          const filename = 'pocket-finance-public-arm64-debug.apk';
+          const hash = createHash('sha256').update(readFileSync(filename)).digest('hex');
+          const repository = `https://github.com/${process.env.GITHUB_REPOSITORY}`;
+          if (info.source_repository !== repository || info.source_commit !== process.env.SOURCE_COMMIT ||
+              info.workflow_run !== `${repository}/actions/runs/${process.env.ARTIFACT_RUN_ID}` ||
+              info.release !== process.env.RELEASE_TAG || info.provider !== 'public no-model fallback' ||
+              info.artifact?.filename !== filename || info.artifact?.sha256 !== hash ||
+              info.artifact?.size_bytes !== statSync(filename).size ||
+              readFileSync('SHA256SUMS', 'utf8') !== `${hash}  ${filename}\n`) {
+            throw new Error('APK, checksum, provenance, tag or source run metadata do not match.');
+          }
+          NODE
           sha256sum -c SHA256SUMS
 
           # Never repoint an existing tag to a different source commit.
@@ -108,7 +155,7 @@ jobs:
           )
           if [ "$tag_exists" = yes ]; then
             tagged_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')
-            if [ "$tagged_commit" != "$GITHUB_SHA" ]; then
+            if [ "$tagged_commit" != "$SOURCE_COMMIT" ]; then
               echo 'The tag already identifies another commit; choose an unused alpha version.' >&2
               exit 1
             fi
@@ -130,12 +177,13 @@ jobs:
 
           if [ -z "$release_id" ]; then
             release_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
-              -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" \
+              -f tag_name="$RELEASE_TAG" -f target_commitish="$SOURCE_COMMIT" \
               -f name="Pocket Finance $RELEASE_TAG — Android test APK" \
               -F draft=true -F prerelease=true -F body=@release.md --jq '.id')
           else
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-              -f target_commitish="$GITHUB_SHA" -F draft=true -F prerelease=true \
+              -f tag_name="$RELEASE_TAG" -f target_commitish="$SOURCE_COMMIT" \
+              -F draft=true -F prerelease=true \
               -F body=@release.md > "$RUNNER_TEMP/release-updated.json"
           fi
 
@@ -157,13 +205,14 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
           const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/release-before-publish.json`, 'utf8'));
-          if (release.draft !== true || release.target_commitish !== process.env.GITHUB_SHA || release.tag_name !== process.env.RELEASE_TAG) {
+          if (release.draft !== true || release.target_commitish !== process.env.SOURCE_COMMIT || release.tag_name !== process.env.RELEASE_TAG) {
             throw new Error('Release state changed before publication; refusing to publish.');
           }
           NODE
 
           release_url=$(gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f tag_name="$RELEASE_TAG" -f target_commitish="$SOURCE_COMMIT" -F body=@release.md \
             -F draft=false -F prerelease=true -f make_latest=false --jq '.html_url')
           printf 'Published test prerelease: %s\n\n' "$release_url" >> "$GITHUB_STEP_SUMMARY"
-          printf 'Source commit: `%s`\n\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Source commit: `%s`\n\n' "$SOURCE_COMMIT" >> "$GITHUB_STEP_SUMMARY"
           cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"

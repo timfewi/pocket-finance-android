@@ -25,6 +25,10 @@ an unused tag such as `v0.1.0-alpha.2`. It checks and builds the public app, ver
 its signature/alignment, uploads the APK and checksum, verifies the uploaded bytes,
 and publishes a prerelease. It refuses to replace an already published release.
 No private repository access or production signing secret is required.
+If publication fails after a successful build, rerun the workflow with the same
+tag and `artifact_run_id` set to that run's numeric ID (within its seven-day
+artifact retention). The workflow validates the source run and artifact metadata,
+then publishes those exact bytes without rebuilding or changing the signing key.
 
 ## Toolchain
 
