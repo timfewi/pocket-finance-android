@@ -4,6 +4,19 @@ The phone is the primary design target. One Svelte interface expands from bottom
 navigation on phones/tablets to a sidebar from 1024px. The app keeps the same
 overview, capture/review and receipt-list functions at every size.
 
+This update is included in the published
+[v0.1.0-alpha.2 test APK](https://github.com/timfewi/pocket-finance-android/releases/tag/v0.1.0-alpha.2),
+built from commit `7dfa21023a9b8d1f5cd6e754e1b3c03f6fd34dca`.
+The [Android workflow](https://github.com/timfewi/pocket-finance-android/actions/runs/42096619225)
+passed build, native JVM tests, signature/alignment checks and remote-byte
+verification before publishing. Its first attempt stalled on an Ubuntu package
+mirror; the second attempt succeeded with unchanged source.
+The [public checks](https://github.com/timfewi/pocket-finance-android/actions/runs/42096439900)
+also passed, including the Rust/browser fixture tests. Release checksum and signing
+certificate are in its attached `BUILDINFO.json`. Each CI build uses a new
+development key: it cannot update an installation signed with a previous key;
+uninstalling that installation deletes its local data.
+
 Implemented behavior:
 
 - Labelled bottom navigation: Übersicht, Erfassen, Belege; active section and draft indicator.

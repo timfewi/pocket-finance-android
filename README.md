@@ -11,8 +11,8 @@ category; Rust and the user remain responsible for amounts and confirmation.
 
 ## Download the Android test app
 
-[Download the ARM64 test APK](https://github.com/timfewi/pocket-finance-android/releases/download/v0.1.0-alpha.1/pocket-finance-public-arm64-debug.apk)
-or open [release v0.1.0-alpha.1](https://github.com/timfewi/pocket-finance-android/releases/tag/v0.1.0-alpha.1)
+[Download the ARM64 test APK](https://github.com/timfewi/pocket-finance-android/releases/download/v0.1.0-alpha.2/pocket-finance-public-arm64-debug.apk)
+or open [release v0.1.0-alpha.2](https://github.com/timfewi/pocket-finance-android/releases/tag/v0.1.0-alpha.2)
 for checksums and verification details. Android 7.0+ (API 24), ARM64; intended for
 testing on phones such as the Solana Seeker. No build tools or private repository
 access are needed to install it.
