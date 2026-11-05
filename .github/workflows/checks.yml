@@ -22,3 +22,18 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Verify mobile and desktop receipt flows
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked -p receipt-core --example receipt_fixture_bridge
+          target/debug/examples/receipt_fixture_bridge 8787 > "$RUNNER_TEMP/receipt-fixture-bridge.log" 2>&1 &
+          bridge_pid=$!
+          trap 'kill "$bridge_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 \
+            -H 'Content-Type: application/json' \
+            -d '{"command":"list_categories","args":{}}' \
+            http://127.0.0.1:8787/invoke > /dev/null
+          RECEIPT_BRIDGE_URL=http://127.0.0.1:8787 npm run test:e2e

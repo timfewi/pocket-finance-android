@@ -76,6 +76,11 @@ jobs:
           npm run check
       - name: Build public Android ARM64 test APK
         run: scripts/android-env.sh npm run tauri -- android build --debug --target aarch64 --apk --ci
+      - name: Verify native receipt files and viewport insets
+        run: |
+          scripts/android-env.sh src-tauri/gen/android/gradlew -p src-tauri/gen/android \
+            :app:testUniversalDebugUnitTest :tauri-plugin-receipt-capture:testDebugUnitTest \
+            -x :app:rustBuildUniversalDebug --no-daemon --max-workers=2
       - name: Verify and package public APK
         run: node scripts/package-public-apk.mjs "$RELEASE_TAG"
       - uses: actions/upload-artifact@v4

@@ -4,10 +4,18 @@ This report separates synthetic OCR-text checks, actual browser behavior, native
 compilation and physical-device behavior. No real receipt or personal financial
 record was used. No camera/Photo Picker/ML Kit execution on a phone is claimed.
 
+The subsequent [mobile-first update](MOBILE-FIRST.md) adds bottom navigation,
+responsive layout checks, draft-preserving navigation and native viewport insets.
+Its browser run passed 11 tests with three intentionally duplicated desktop cases
+skipped; three additional native inset JVM tests passed. The table and local APK
+hashes below record the initial receipt milestone. Each published APK's attached
+`BUILDINFO.json` identifies its own source commit, checksum and signing certificate.
+
 [BUILD-SOURCE-SHA256SUMS](BUILD-SOURCE-SHA256SUMS) records the published source/input
-snapshot, including dependency locks. It is not a guarantee of bit-for-bit APK
-reproduction across machines or signing keys. Two generated Gradle files had
-trailing blank lines removed after packaging; no executable behavior changed.
+snapshot for this checkout, including dependency locks. It is not a guarantee of
+bit-for-bit APK reproduction across machines or signing keys. For the initial
+locally packaged APKs, two generated Gradle files had trailing blank lines removed
+after packaging; no executable behavior changed.
 
 ## Executed checks
 

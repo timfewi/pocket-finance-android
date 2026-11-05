@@ -30,9 +30,18 @@ APK binaries are attached to GitHub Releases, not committed to Git history.
 The release APK is built in GitHub Actions; its own checksum, signing certificate
 and source commit are recorded in the attached `BUILDINFO.json`.
 
-![Synthetic receipt review in the browser with the real Rust fixture bridge](docs/images/receipt-review.png)
+## Mobile first, desktop adaptable
 
-The screenshot shows a synthetic browser fixture, not a phone camera test.
+Phone layouts use a bottom menu for **Übersicht, Erfassen, Belege**, large touch
+targets and readable form fields. An unfinished receipt stays available when
+switching sections. The same interface expands to a sidebar and wider review
+layout on desktop screens. Native desktop file import/OCR are still future work.
+See the [mobile-first design and verification notes](docs/MOBILE-FIRST.md).
+
+<img src="docs/images/mobile-capture.png" width="360" alt="Mobile browser preview with capture choices and bottom navigation" />
+
+The screenshot shows the synthetic mobile browser preview, not a phone camera
+test. [Desktop review preview](docs/images/receipt-review.png).
 
 ## Receipt workflow
 

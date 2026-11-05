@@ -76,6 +76,11 @@ const info = {
 writeFileSync(join(output, 'BUILDINFO.json'), `${JSON.stringify(info, null, 2)}\n`);
 writeFileSync(join(output, 'release.md'), `Public **alpha test APK** for the receipt workflow: photograph or import a receipt, recognize Latin text with bundled on-device OCR, review the fields, and explicitly save an expense locally.
 
+The mobile-first interface uses bottom navigation for overview, capture and receipts,
+preserves edits when switching sections, and expands to a sidebar on wider screens.
+Android applies system-bar/cutout/keyboard insets to the WebView; actual Seeker
+keyboard and layout behavior still need device verification.
+
 ### Download and install
 
 - Download **${filename}** below (${size.toLocaleString('en-US')} bytes; approximately ${Math.ceil(size / 1_000_000)} MB).
@@ -85,7 +90,7 @@ writeFileSync(join(output, 'release.md'), `Public **alpha test APK** for the rec
 
 ### Verification and limitations
 
-This APK was built from the public source in GitHub Actions. Public Rust tests and frontend checks ran before the Android build. The APK v2 signature and 16 KiB ZIP alignment were verified. Earlier synthetic browser tests confirmed that a 12,49 EUR total, 20,00 EUR cash tendered and 7,51 EUR change save exactly 1249 cents; see the [verification report](https://github.com/${repository}/blob/${sourceCommit}/docs/VERIFICATION.md).
+This APK was built from the public source in GitHub Actions. Public Rust tests and frontend checks ran before the Android build; native receipt-file and viewport-inset JVM tests ran after it. The APK v2 signature and 16 KiB ZIP alignment were verified. Synthetic browser tests confirmed that a 12,49 EUR total, 20,00 EUR cash tendered and 7,51 EUR change save exactly 1249 cents; see the [verification report](https://github.com/${repository}/blob/${sourceCommit}/docs/VERIFICATION.md) and [mobile-first checks](https://github.com/${repository}/blob/${sourceCommit}/docs/MOBILE-FIRST.md).
 
 **No physical phone was available:** installation, camera, actual OCR and first-launch airplane mode remain unverified. This is a development-signed, debuggable test build and retains Internet/network-state permissions. The runner generates a development signing key; this is not a stable production signing identity. Installing over a differently signed build may require uninstalling that app, which deletes its local data.
 

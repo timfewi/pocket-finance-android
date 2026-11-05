@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Camera, ImagePlus, ReceiptText, ArrowUpRight, ArrowLeft, Check, CheckCheck, ShieldCheck, WifiOff, Plus, ChevronRight, Expand, X, LoaderCircle, AlertCircle, Sparkles, Wallet, ScanLine, Leaf, CheckCircle2 } from '@lucide/svelte';
+  import { Camera, ImagePlus, ReceiptText, ArrowLeft, Check, CheckCheck, ShieldCheck, WifiOff, Plus, ChevronRight, Expand, X, LoaderCircle, AlertCircle, Sparkles, Wallet, ScanLine, Leaf, CheckCircle2 } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
@@ -10,6 +10,13 @@
   import { editMoney, formatDate, formatMoney, inputCents } from '$lib/format';
   import type { Category, CategorySuggestion, DemoScenario, ReceiptDraft, Transaction } from '$lib/types';
 
+  type View = 'overview' | 'capture' | 'receipts';
+  const navigation: { view: View; label: string; icon: typeof Wallet }[] = [
+    { view: 'overview', label: 'Übersicht', icon: Wallet },
+    { view: 'capture', label: 'Erfassen', icon: ScanLine },
+    { view: 'receipts', label: 'Belege', icon: ReceiptText }
+  ];
+  let view = $state<View>('overview');
   let native = $state(false);
   let connectedDemo = $state(false);
   let initialized = $state(false);
@@ -39,6 +46,7 @@
   const valid = $derived(merchant.trim().length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(receiptDate) && amountCents !== null && categories.some(c => c.id === categoryId) && currency === 'EUR');
   const currencyUnclear = $derived(Boolean(draft?.warnings.some(w => /currency.*not printed|currency.*missing|missing_currency/i.test(w))));
   const ambiguous = $derived(Boolean(draft && draft.totalCents === null && draft.amountCandidates.length > 1));
+  const viewLabel = $derived(view === 'capture' ? draft ? 'Beleg prüfen' : 'Beleg erfassen' : view === 'receipts' ? 'Belege' : 'Übersicht');
 
   onMount(() => {
     native = api.nativeRuntime();
@@ -53,9 +61,24 @@
     finally { initialized = true; }
   }
 
-  async function start(source: 'camera' | 'import') {
+  async function focusView() {
+    await tick();
+    const heading = view === 'capture' ? draft ? 'review-heading' : 'capture-heading' : view === 'receipts' ? 'receipts-heading' : 'overview-heading';
+    document.getElementById(heading)?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  async function navigate(next: View) {
     if (busy) return;
+    view = next;
+    await focusView();
+  }
+
+  async function start(source: 'camera' | 'import') {
+    if (busy || !initialized) return;
+    if (draft) { await navigate('capture'); return; }
     const current = ++actionNumber;
+    view = 'capture';
     busy = 'capture'; error = ''; notice = ''; saved = null; detail = null;
     try {
       const image = source === 'camera' ? await api.captureReceipt(scenario) : await api.importReceipt(scenario);
@@ -67,13 +90,17 @@
       merchant = next.merchant ?? ''; receiptDate = next.date ?? ''; amount = editMoney(next.totalCents);
       categoryId = next.categoryId ?? ''; currency = next.currency; confirmed = false; suggestion = null;
       busy = null;
-      await tick();
-      document.getElementById('review-heading')?.focus();
+      await focusView();
       void getSuggestion(next.id);
     } catch (cause) {
       const code = typeof cause === 'string' ? cause : cause instanceof Error ? cause.message : cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string' ? cause.code : '';
       if (!/cancelled|canceled|abgebrochen/i.test(code)) error = 'Der Beleg konnte nicht geöffnet werden. Bitte versuche ein anderes Bild.';
-    } finally { if (current === actionNumber) busy = null; }
+    } finally {
+      if (current === actionNumber) {
+        busy = null;
+        if (!draft) await focusView();
+      }
+    }
   }
 
   async function getSuggestion(id: string) {
@@ -99,8 +126,9 @@
       const result = await api.saveReceipt({ draftId: draft.id, merchant: merchant.trim(), date: receiptDate, totalCents: amountCents, currency, categoryId, confirmed: true });
       saved = result;
       transactions = [result, ...transactions.filter(t => t.id !== result.id)].slice(0, 200);
-      draft = null; confirmed = false; suggesting = false;
-      await tick(); document.getElementById('saved-message')?.focus();
+      draft = null; confirmed = false; suggesting = false; view = 'overview';
+      await tick(); document.getElementById('saved-message')?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: 'instant' });
     } catch { error = 'Speichern nicht möglich. Deine Eingaben bleiben erhalten. Bitte prüfe die Angaben und versuche es erneut.'; }
     finally { busy = null; }
   }
@@ -111,7 +139,7 @@
     if (!draft || busy) return;
     discardDialog.close();
     busy = 'discarding'; error = '';
-    try { const result = await api.discardReceipt(draft.id); draft = null; confirmed = false; suggesting = false; actionNumber++; if (result.imageCleanupPending) notice = 'Der Entwurf wurde verworfen. Das zugehörige Bild konnte noch nicht entfernt werden.'; }
+    try { const result = await api.discardReceipt(draft.id); draft = null; confirmed = false; suggesting = false; view = 'overview'; actionNumber++; if (result.imageCleanupPending) notice = 'Der Entwurf wurde verworfen. Das zugehörige Bild konnte noch nicht entfernt werden.'; await focusView(); }
     catch { error = 'Der Entwurf konnte nicht verworfen werden. Bitte versuche es erneut.'; }
     finally { busy = null; }
   }
@@ -123,17 +151,23 @@
 
 <div class="app-shell">
   <aside class="sidebar">
-    <a class="brand" href="/" aria-label="Pocket Finance Startseite"><span class="brand-mark"><ReceiptText size={23} strokeWidth={1.8} /></span><span>Pocket<span class="brand-light">Finance</span></span></a>
+    <button class="brand" onclick={() => navigate('overview')} disabled={Boolean(busy)} aria-label="Pocket Finance Startseite"><span class="brand-mark"><ReceiptText size={23} strokeWidth={1.8} /></span><span>Pocket<span class="brand-light">Finance</span></span></button>
     <div class="sidebar-label">DEIN FINANZALLTAG</div>
-    <button class:active={!draft} class="nav-item" onclick={() => { if (draft) askDiscard(); detail = null; }} disabled={Boolean(busy)}><Wallet size={19} /> Übersicht <span class="nav-dot"></span></button>
-    <button class:active={Boolean(draft)} class="nav-item" onclick={() => { if (!draft) void start('camera'); }} disabled={Boolean(busy)}><ScanLine size={19} /> Beleg erfassen</button>
+    <nav class="desktop-nav" aria-label="Hauptnavigation">
+      {#each navigation as item}
+        {@const Icon = item.icon}
+        <button class="nav-item" class:active={view === item.view} onclick={() => navigate(item.view)} disabled={Boolean(busy)} aria-current={view === item.view ? 'page' : undefined} aria-describedby={item.view === 'capture' && draft ? 'draft-nav-description' : undefined}>
+          <Icon size={20} /><span>{item.label}</span>{#if item.view === 'capture' && draft}<span class="draft-dot" aria-hidden="true"></span>{/if}
+        </button>
+      {/each}
+    </nav>
     <div class="sidebar-bottom"><ShieldCheck size={19} /><div><strong>Dein Geld. Deine Daten.</strong><span>Lokal auf deinem Gerät.</span></div></div>
   </aside>
 
   <div class="main-shell">
     <header class="topbar">
-      <a class="mobile-brand" href="/" aria-label="Pocket Finance Startseite"><span class="brand-mark"><ReceiptText size={21} /></span><strong>Pocket Finance</strong></a>
-      <div class="breadcrumb">Persönlich <ChevronRight size={14} /><span>{draft ? 'Beleg prüfen' : 'Übersicht'}</span></div>
+      <button class="mobile-brand" onclick={() => navigate('overview')} disabled={Boolean(busy)} aria-label="Pocket Finance Startseite"><span class="brand-mark"><ReceiptText size={21} /></span><strong>Pocket Finance</strong></button>
+      <div class="breadcrumb">Persönlich <ChevronRight size={14} /><span>{viewLabel}</span></div>
       <span class="offline-status"><span class="status-dot"></span>{native ? 'Auf diesem Gerät' : 'Browser-Vorschau'}</span>
     </header>
 
@@ -147,6 +181,14 @@
         <div class="error-banner" role="alert"><AlertCircle size={20} /><span>{error}</span>{#if !draft}<button onclick={load}>Erneut laden</button>{/if}</div>
       {/if}
 
+      {#if draft && view !== 'capture'}
+        <div class="draft-resume">
+          <ReceiptText size={22} aria-hidden="true" />
+          <div class="draft-resume-copy"><strong>Dein Entwurf wartet.</strong><span>Deine Eingaben bleiben beim Wechseln erhalten. Noch nichts gespeichert.</span></div>
+          <Button variant="outline" onclick={() => navigate('capture')} disabled={Boolean(busy)}>Entwurf weiter prüfen <ChevronRight size={17} /></Button>
+        </div>
+      {/if}
+
       {#if busy === 'capture' || busy === 'ocr'}
         <section class="processing-panel" aria-live="polite" aria-busy="true">
           <div class="processing-icon"><ScanLine size={34} /><LoaderCircle class="spinner progress-spinner" size={18} /></div>
@@ -155,10 +197,10 @@
           <p>{busy === 'capture' ? 'Nach der Auswahl kannst du alle Angaben prüfen.' : 'Händler, Datum und Gesamtbetrag werden für dich vorbereitet.'}</p>
           <div class="privacy-line"><ShieldCheck size={16} />{native ? 'Die Verarbeitung bleibt auf deinem Gerät.' : 'Synthetischer Testablauf in der Browser-Vorschau.'}</div>
         </section>
-      {:else if draft}
+      {:else if draft && view === 'capture'}
         <section class="review-section">
           <div class="page-heading review-heading">
-            <div><button class="back-link" onclick={askDiscard} disabled={Boolean(busy)}><ArrowLeft size={16} /> Zur Übersicht</button><h1 id="review-heading" tabindex="-1">Einmal prüfen.<br class="mobile-break" /> Dann ablegen.</h1><p>Dein Beleg ist vorbereitet. Du entscheidest, was gespeichert wird.</p></div>
+            <div><button class="back-link" onclick={() => navigate('overview')} disabled={Boolean(busy)}><ArrowLeft size={16} /> Zur Übersicht</button><h1 id="review-heading" tabindex="-1">Einmal prüfen.<br class="mobile-break" /> Dann ablegen.</h1><p>Dein Beleg ist vorbereitet. Du entscheidest, was gespeichert wird.</p></div>
             <Badge class="draft-badge"><span class="small-dot"></span> Entwurf</Badge>
           </div>
           <div class="review-grid">
@@ -193,28 +235,60 @@
             </Card.Root>
           </div>
         </section>
+      {:else if view === 'capture'}
+        <section class="capture-section">
+          <div class="page-heading"><div><p class="eyebrow">EIN EINKAUF. EIN BELEG.</p><h1 id="capture-heading" tabindex="-1">Beleg erfassen</h1><p>Wähle ein Foto aus. Danach prüfst du alle Angaben in Ruhe.</p></div></div>
+          <Card.Root class="capture-panel">
+            <Card.Content>
+              <span class="capture-panel-icon" aria-hidden="true"><ScanLine size={36} strokeWidth={1.6} /></span>
+              <h2>Wie möchtest du starten?</h2>
+              <p>{native ? 'Fotografiere den ganzen Beleg möglichst gerade und bei gutem Licht.' : 'Die Browser-Vorschau verwendet synthetische Belege. Kamera und OCR werden hier nicht ausgeführt.'}</p>
+              <div class="capture-choices">
+                <button class="capture-choice" aria-label={native ? 'Foto aufnehmen' : 'Beispielbeleg prüfen'} onclick={() => start('camera')} disabled={!initialized || Boolean(busy)}><Camera size={25} aria-hidden="true" /><span><strong>{native ? 'Foto aufnehmen' : 'Beispielbeleg prüfen'}</strong><span>{native ? 'Mit der Kamera deines Geräts' : 'Synthetischen Beleg öffnen'}</span></span><ChevronRight size={20} aria-hidden="true" /></button>
+                <button class="capture-choice" aria-label={native ? 'Bild auswählen' : 'Beispiel importieren'} onclick={() => start('import')} disabled={!initialized || Boolean(busy)}><ImagePlus size={25} aria-hidden="true" /><span><strong>{native ? 'Bild auswählen' : 'Beispiel importieren'}</strong><span>{native ? 'Ein vorhandenes Belegfoto verwenden' : 'Den Import mit Testdaten ausprobieren'}</span></span><ChevronRight size={20} aria-hidden="true" /></button>
+              </div>
+              <div class="privacy-line"><ShieldCheck size={16} />Du bestätigst. Erst dann wird gespeichert.</div>
+            </Card.Content>
+          </Card.Root>
+          {#if !native}{@render demoControls()}{/if}
+        </section>
       {:else}
         <section class="overview-section">
-          <div class="page-heading"><div><p class="eyebrow">WENIGER PAPIER. MEHR ÜBERBLICK.</p><h1>Alles an einem Ort.</h1><p>Beleg aufnehmen, Angaben prüfen, Ausgabe ablegen.</p></div><Button class="header-scan" onclick={() => start('camera')} disabled={!initialized || Boolean(busy)}><Plus size={17} />{native ? 'Neuer Beleg' : 'Beispielbeleg prüfen'}</Button></div>
+          <div class="page-heading"><div><p class="eyebrow">{view === 'receipts' ? 'DEINE GESPEICHERTEN AUSGABEN.' : 'WENIGER PAPIER. MEHR ÜBERBLICK.'}</p><h1 id={view === 'receipts' ? 'receipts-heading' : 'overview-heading'} tabindex="-1">{view === 'receipts' ? 'Deine Belege' : 'Alles an einem Ort.'}</h1><p>{view === 'receipts' ? 'Was du geprüft und gespeichert hast, findest du hier.' : 'Beleg aufnehmen, Angaben prüfen, Ausgabe ablegen.'}</p></div><Button class="header-scan" onclick={() => start('camera')} disabled={!initialized || Boolean(busy)}><Plus size={17} />{draft ? 'Beleg prüfen' : native ? 'Neuer Beleg' : 'Beispielbeleg prüfen'}</Button></div>
           {#if saved}<div class="success-banner" role="status" id="saved-message" tabindex="-1"><span class="success-icon"><CheckCheck size={23} /></span><div><strong>{native || connectedDemo ? 'Ausgabe gespeichert' : 'In der Demo gespeichert'}</strong><p>{saved.merchant} · {formatMoney(saved.totalCents)} · {formatDate(saved.date)}</p></div><button aria-label="Erfolgsmeldung schließen" onclick={() => saved = null}><X size={18} /></button></div>{/if}
-          <div class="overview-grid">
+          {#if view === 'overview'}<div class="overview-grid">
             <Card.Root class="balance-card"><Card.Content class="balance-content"><div class="balance-top"><span>Summe der angezeigten Belege</span><span class="balance-icon"><Wallet size={18} /></span></div><div class="balance-amount">{Number.isSafeInteger(totalSpent) ? formatMoney(totalSpent) : '—'}</div><div class="balance-bottom"><span>{transactions.length} {transactions.length === 1 ? 'Beleg' : 'Belege'} gespeichert</span><span>EUR</span></div></Card.Content></Card.Root>
-            <Card.Root class="scan-card"><Card.Content class="scan-content"><span class="scan-icon"><ScanLine size={28} strokeWidth={1.6} /></span><div><h2>Aus Papier wird Übersicht.</h2><p>Ein Foto genügt für den ersten Schritt.<br />Alles Weitere prüfst du selbst.</p></div><ArrowUpRight class="scan-arrow" size={24} /></Card.Content></Card.Root>
-          </div>
-          <div class="list-heading"><div><h2>Deine Belege</h2><span>{transactions.length ? 'Bis zu 200 zuletzt gespeicherte Belege' : 'Hier beginnt deine persönliche Übersicht'}</span></div><Badge variant="outline" class="count-badge">{transactions.length}</Badge></div>
+            <Card.Root class="scan-card"><Card.Content class="scan-content"><span class="scan-icon"><ScanLine size={28} strokeWidth={1.6} /></span><div><h2>Aus Papier wird Übersicht.</h2><p>Ein Foto genügt für den ersten Schritt.<br />Alles Weitere prüfst du selbst.</p></div></Card.Content></Card.Root>
+          </div>{/if}
+          <div class="list-heading"><div><h2>{view === 'receipts' ? 'Gespeicherte Ausgaben' : 'Deine Belege'}</h2><span>{transactions.length ? 'Bis zu 200 zuletzt gespeicherte Belege' : 'Hier beginnt deine persönliche Übersicht'}</span></div><Badge variant="outline" class="count-badge">{transactions.length}</Badge></div>
           {#if !initialized}<div class="loading-list" role="status"><LoaderCircle class="spinner" size={24} /> Übersicht wird geladen …</div>{:else if transactions.length === 0}
-            <Card.Root class="empty-card"><Card.Content class="empty-content"><div class="receipt-illustration" aria-hidden="true"><div class="receipt-paper"><span class="paper-logo"><Leaf size={20} /></span><span class="paper-line long"></span><span class="paper-line"></span><span class="paper-divider"></span><span class="paper-line long"></span><span class="paper-line short"></span><span class="paper-total"><span></span><Check size={15} /></span></div><div class="receipt-check"><Check size={21} /></div><span class="illustration-spark spark-one">+</span><span class="illustration-spark spark-two">+</span></div><h2>Dein erster Beleg wartet.</h2><p>Halte einen Einkauf fest.<br />Die Angaben bleiben bis zu deiner Bestätigung ein Entwurf.</p><div class="capture-actions"><Button onclick={() => start('camera')} class="capture-primary"><Camera size={18} />{native ? 'Foto aufnehmen' : 'Beispielbeleg prüfen'}</Button><Button variant="outline" onclick={() => start('import')}><ImagePlus size={18} />{native ? 'Bild auswählen' : 'Beispiel importieren'}</Button></div><span class="empty-privacy"><WifiOff size={14} />{native ? 'Kein Konto. Keine Cloud. Deine Kontrolle.' : 'Browser-Demo mit synthetischen Testdaten.'}</span></Card.Content></Card.Root>
-          {:else}<div class="transaction-list">{#each transactions as transaction}<button class="transaction-row" onclick={() => detail = detail?.id === transaction.id ? null : transaction} aria-expanded={detail?.id === transaction.id}><span class="transaction-icon"><ReceiptText size={22} /></span><span class="transaction-description"><strong>{transaction.merchant}</strong><span>{categoryLabel(transaction.categoryId)} <span class="dot-separator">·</span> {formatDate(transaction.date)}</span></span><span class="transaction-amount">−{formatMoney(transaction.totalCents)}<span><CheckCircle2 size={12} /> Gespeichert</span></span><ChevronRight size={17} /></button>{#if detail?.id === transaction.id}<div class="transaction-detail"><dl><div><dt>Belegdatum</dt><dd>{formatDate(transaction.date)}</dd></div><div><dt>Kategorie</dt><dd>{categoryLabel(transaction.categoryId)}</dd></div><div><dt>Betrag</dt><dd>{transaction.totalCents} Cent · {transaction.currency}</dd></div></dl><p>Dieser Datensatz wurde nach deiner Bestätigung gespeichert.</p></div>{/if}{/each}</div><div class="saved-capture-actions"><Button onclick={() => start('camera')}><Camera size={18} />{native ? 'Weiteren Beleg aufnehmen' : 'Beispielbeleg prüfen'}</Button><Button variant="outline" onclick={() => start('import')}><ImagePlus size={18} />{native ? 'Bild auswählen' : 'Beispiel importieren'}</Button></div>{/if}
-          {#if !native}<details class="demo-controls"><summary>Testszenario auswählen <ChevronRight size={15} /></summary><Label for="demo-scenario">Synthetischer Beleg für den nächsten Durchlauf</Label><select id="demo-scenario" bind:value={scenario}><option value="standard">12,49 € Gesamt · 20,00 € bar · 7,51 € Rückgeld</option><option value="ambiguous">Zwei mögliche Gesamtbeträge</option><option value="ocr_failure">Texterkennung nicht verfügbar</option></select><p>Die Kategorie kann ohne Modell manuell gewählt werden.</p></details>{/if}
+            <Card.Root class="empty-card"><Card.Content class="empty-content"><div class="receipt-illustration" aria-hidden="true"><div class="receipt-paper"><span class="paper-logo"><Leaf size={20} /></span><span class="paper-line long"></span><span class="paper-line"></span><span class="paper-divider"></span><span class="paper-line long"></span><span class="paper-line short"></span><span class="paper-total"><span></span><Check size={15} /></span></div><div class="receipt-check"><Check size={21} /></div><span class="illustration-spark spark-one">+</span><span class="illustration-spark spark-two">+</span></div><h2>{draft ? 'Dein Beleg ist noch ein Entwurf.' : 'Dein erster Beleg wartet.'}</h2><p>{#if draft}Prüfe die Angaben unter „Erfassen“. Nach deiner Bestätigung erscheint die Ausgabe hier.{:else}Halte einen Einkauf fest.<br />Die Angaben bleiben bis zu deiner Bestätigung ein Entwurf.{/if}</p>{#if !draft}<div class="capture-actions"><Button onclick={() => start('camera')} class="capture-primary"><Camera size={18} />{native ? 'Foto aufnehmen' : 'Beispielbeleg prüfen'}</Button><Button variant="outline" onclick={() => start('import')}><ImagePlus size={18} />{native ? 'Bild auswählen' : 'Beispiel importieren'}</Button></div>{/if}<span class="empty-privacy"><WifiOff size={14} />{native ? 'Kein Konto. Keine Cloud. Deine Kontrolle.' : 'Browser-Demo mit synthetischen Testdaten.'}</span></Card.Content></Card.Root>
+          {:else}<div class="transaction-list">{#each transactions as transaction}<button class="transaction-row" onclick={() => detail = detail?.id === transaction.id ? null : transaction} aria-expanded={detail?.id === transaction.id}><span class="transaction-icon"><ReceiptText size={22} /></span><span class="transaction-description"><strong>{transaction.merchant}</strong><span>{categoryLabel(transaction.categoryId)} <span class="dot-separator">·</span> {formatDate(transaction.date)}</span></span><span class="transaction-amount">−{formatMoney(transaction.totalCents)}<span><CheckCircle2 size={12} /> Gespeichert</span></span><ChevronRight size={17} /></button>{#if detail?.id === transaction.id}<div class="transaction-detail"><dl><div><dt>Belegdatum</dt><dd>{formatDate(transaction.date)}</dd></div><div><dt>Kategorie</dt><dd>{categoryLabel(transaction.categoryId)}</dd></div><div><dt>Betrag</dt><dd>{transaction.totalCents} Cent · {transaction.currency}</dd></div></dl><p>Dieser Datensatz wurde nach deiner Bestätigung gespeichert.</p></div>{/if}{/each}</div>{#if !draft}<div class="saved-capture-actions"><Button onclick={() => start('camera')}><Camera size={18} />{native ? 'Weiteren Beleg aufnehmen' : 'Beispielbeleg prüfen'}</Button><Button variant="outline" onclick={() => start('import')}><ImagePlus size={18} />{native ? 'Bild auswählen' : 'Beispiel importieren'}</Button></div>{/if}{/if}
+          {#if !native}{@render demoControls()}{/if}
           <footer class="page-footer"><ShieldCheck size={15} /><span>Du bestätigst. Erst dann wird gespeichert.</span><span class="footer-wordmark">POCKET FINANCE</span></footer>
         </section>
       {/if}
     </main>
   </div>
+  <nav class="mobile-nav" aria-label="Hauptnavigation">
+    {#each navigation as item}
+      {@const Icon = item.icon}
+      <button class="mobile-nav-item" class:active={view === item.view} class:nav-capture={item.view === 'capture'} onclick={() => navigate(item.view)} disabled={Boolean(busy)} aria-current={view === item.view ? 'page' : undefined} aria-describedby={item.view === 'capture' && draft ? 'draft-nav-description' : undefined}>
+        <span class="mobile-nav-icon"><Icon size={23} strokeWidth={1.8} />{#if item.view === 'capture' && draft}<span class="draft-dot" aria-hidden="true"></span>{/if}</span>
+        <span class="mobile-nav-label">{item.label}</span>
+      </button>
+    {/each}
+  </nav>
 </div>
 
-<dialog bind:this={photoDialog} class="photo-dialog" onclick={(event) => { if (event.target === photoDialog) photoDialog.close(); }} onkeydown={(event) => { if (event.key === 'Escape') photoDialog.close(); }}>
-  <div class="photo-dialog-header"><span>Originalbeleg</span><Button variant="ghost" size="icon" onclick={() => photoDialog.close()} aria-label="Vergrößerten Beleg schließen"><X size={22} /></Button></div>
+{#if draft}<span id="draft-nav-description" class="sr-only">Ungespeicherter Entwurf vorhanden</span>{/if}
+
+{#snippet demoControls()}
+  <details class="demo-controls"><summary>Testszenario auswählen <ChevronRight size={15} /></summary><Label for="demo-scenario">Synthetischer Beleg für den nächsten Durchlauf</Label><select id="demo-scenario" bind:value={scenario}><option value="standard">12,49 € Gesamt · 20,00 € bar · 7,51 € Rückgeld</option><option value="ambiguous">Zwei mögliche Gesamtbeträge</option><option value="ocr_failure">Texterkennung nicht verfügbar</option></select><p>Die Kategorie kann ohne Modell manuell gewählt werden.</p></details>
+{/snippet}
+
+<dialog bind:this={photoDialog} class="photo-dialog" aria-labelledby="photo-title" onclick={(event) => { if (event.target === photoDialog) photoDialog.close(); }} onkeydown={(event) => { if (event.key === 'Escape') photoDialog.close(); }}>
+  <div class="photo-dialog-header"><span id="photo-title">Originalbeleg</span><Button variant="ghost" size="icon" onclick={() => photoDialog.close()} aria-label="Vergrößerten Beleg schließen"><X size={22} /></Button></div>
   {#if photo}<img src={photo} alt="Vergrößerter Originalbeleg" />{/if}
 </dialog>
 

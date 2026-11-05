@@ -11,3 +11,10 @@ Privacy and source boundaries:
 - OCR/model failures never disable manual editing and saving. No model may commit a transaction.
 
 Paths are repository-relative. Generated files belong under ignored artifacts/ or target/. Never document internal executor paths. Coordinate file ownership before parallel edits. Use official Tauri/Android interfaces; report native build and physical-device verification separately from Rust/browser tests.
+
+Mobile-first is an explicit product requirement. Design and verify the phone flow
+first, with reachable bottom navigation, touch targets of at least 48 CSS pixels,
+readable form text, and no horizontal scrolling at narrow widths. Expand the same
+app to tablet/desktop layouts; do not create a separate desktop UI. Preserve drafts
+when switching sections. Respect native system-bar/cutout/keyboard insets. Browser
+viewport checks are not evidence of perfect behavior on a physical Solana Seeker.
