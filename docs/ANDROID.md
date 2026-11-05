@@ -5,6 +5,17 @@ weights. Native receipt capture/import and bundled Latin OCR are provided by
 `plugins/receipt-capture`; Rust validates drafts and stores explicitly confirmed
 transactions locally. Category-model availability must never block manual entry.
 
+## Install the published test APK
+
+The [v0.1.0-alpha.1 release](https://github.com/timfewi/pocket-finance-android/releases/tag/v0.1.0-alpha.1)
+provides the preserved **public ARM64 debug APK**, signed with a development key,
+plus `SHA256SUMS` and build provenance. Download it on an ARM64 Android 7.0+ phone
+and allow installation from the browser when prompted. No local build is needed.
+This is an alpha test build; physical-device verification is still pending. Its
+debug manifest retains Internet permission. Test with synthetic receipts and turn
+on airplane mode before first launch to verify bundled OCR startup offline.
+Future signing-key changes may require uninstalling the app, deleting local data.
+
 ## Toolchain
 
 The Android project is generated with Tauri CLI 2.12.4 and maintained under

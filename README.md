@@ -9,6 +9,25 @@ The optional private `pocket-finance-agent` category provider is a library
 substitution, not a dependency of the default public build. It can suggest a
 category; Rust and the user remain responsible for amounts and confirmation.
 
+## Download the Android test app
+
+[Download the ARM64 APK (169 MB)](https://github.com/timfewi/pocket-finance-android/releases/download/v0.1.0-alpha.1/pocket-finance-public-arm64-debug.apk)
+or open [release v0.1.0-alpha.1](https://github.com/timfewi/pocket-finance-android/releases/tag/v0.1.0-alpha.1)
+for checksums and verification details. Android 7.0+ (API 24), ARM64; intended for
+testing on phones such as the Solana Seeker. No build tools or private repository
+access are needed to install it.
+
+Download the APK on the phone, open it and allow installation from that browser
+when Android asks. This is a development-signed **alpha test build**, not a
+production release. Camera/OCR and first-launch airplane mode have not yet been
+verified on a physical device. Test with synthetic receipts. The debug build
+retains Internet permission; enable airplane mode before its first launch for the
+offline acceptance test. OCR assets are bundled, but no Qwen model or private
+agent implementation is included. A future signing-key change may require an
+uninstall, which deletes local app data.
+
+APK binaries are attached to GitHub Releases, not committed to Git history.
+
 ![Synthetic receipt review in the browser with the real Rust fixture bridge](docs/images/receipt-review.png)
 
 The screenshot shows a synthetic browser fixture, not a phone camera test.
