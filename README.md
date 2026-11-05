@@ -11,7 +11,7 @@ category; Rust and the user remain responsible for amounts and confirmation.
 
 ## Download the Android test app
 
-[Download the ARM64 APK (169 MB)](https://github.com/timfewi/pocket-finance-android/releases/download/v0.1.0-alpha.1/pocket-finance-public-arm64-debug.apk)
+[Download the ARM64 test APK](https://github.com/timfewi/pocket-finance-android/releases/download/v0.1.0-alpha.1/pocket-finance-public-arm64-debug.apk)
 or open [release v0.1.0-alpha.1](https://github.com/timfewi/pocket-finance-android/releases/tag/v0.1.0-alpha.1)
 for checksums and verification details. Android 7.0+ (API 24), ARM64; intended for
 testing on phones such as the Solana Seeker. No build tools or private repository
@@ -27,6 +27,8 @@ agent implementation is included. A future signing-key change may require an
 uninstall, which deletes local app data.
 
 APK binaries are attached to GitHub Releases, not committed to Git history.
+The release APK is built in GitHub Actions; its own checksum, signing certificate
+and source commit are recorded in the attached `BUILDINFO.json`.
 
 ![Synthetic receipt review in the browser with the real Rust fixture bridge](docs/images/receipt-review.png)
 

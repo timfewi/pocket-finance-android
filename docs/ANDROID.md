@@ -8,13 +8,23 @@ transactions locally. Category-model availability must never block manual entry.
 ## Install the published test APK
 
 The [v0.1.0-alpha.1 release](https://github.com/timfewi/pocket-finance-android/releases/tag/v0.1.0-alpha.1)
-provides the preserved **public ARM64 debug APK**, signed with a development key,
-plus `SHA256SUMS` and build provenance. Download it on an ARM64 Android 7.0+ phone
+provides a **public ARM64 debug APK built in GitHub Actions**, signed with a
+development key, plus `SHA256SUMS` and build provenance. Download it on an ARM64 Android 7.0+ phone
 and allow installation from the browser when prompted. No local build is needed.
 This is an alpha test build; physical-device verification is still pending. Its
 debug manifest retains Internet permission. Test with synthetic receipts and turn
 on airplane mode before first launch to verify bundled OCR startup offline.
 Future signing-key changes may require uninstalling the app, deleting local data.
+Each fresh CI runner generates a development key; stable production signing is
+not configured. The release's `BUILDINFO.json` identifies its source commit,
+workflow run, checksum and certificate. These differ from the historical local
+build artifacts recorded below.
+
+Maintainers can run the **Publish Android test APK** workflow from GitHub Actions with
+an unused tag such as `v0.1.0-alpha.2`. It checks and builds the public app, verifies
+its signature/alignment, uploads the APK and checksum, verifies the uploaded bytes,
+and publishes a prerelease. It refuses to replace an already published release.
+No private repository access or production signing secret is required.
 
 ## Toolchain
 

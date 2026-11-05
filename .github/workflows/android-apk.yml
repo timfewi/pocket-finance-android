@@ -1,0 +1,169 @@
+name: Publish Android test APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Unused alpha tag, for example v0.1.0-alpha.1 (an existing draft is allowed)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      CARGO_BUILD_JOBS: '2'
+      GRADLE_OPTS: '-Dorg.gradle.workers.max=2'
+    steps:
+      - name: Validate alpha tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]] || {
+            echo 'Only versioned alpha tags are accepted.' >&2
+            exit 1
+          }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21.0.13+9'
+      - name: Install native prerequisites and pinned Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes build-essential pkg-config libssl-dev
+          : "${ANDROID_HOME:=${ANDROID_SDK_ROOT:?Android SDK is required}}"
+          sdkmanager --install 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865'
+          printf 'ANDROID_HOME=%s\n' "$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Install pinned Rust and Android target
+        run: |
+          rustup show
+          rustup target add aarch64-linux-android
+      - name: Verify public Rust crates and frontend
+        run: |
+          cargo test --locked -p receipt-core
+          cargo test --manifest-path crates/category-provider/Cargo.toml --locked
+          npm ci
+          npm run check
+      - name: Build public Android ARM64 test APK
+        run: scripts/android-env.sh npm run tauri -- android build --debug --target aarch64 --apk --ci
+      - name: Verify and package public APK
+        run: node scripts/package-public-apk.mjs "$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: artifacts/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: release-bundle
+      - name: Upload, verify remote APK, and publish prerelease
+        working-directory: release-bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]
+          sha256sum -c SHA256SUMS
+
+          # Never repoint an existing tag to a different source commit.
+          gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" > "$RUNNER_TEMP/tag-refs.json"
+          tag_exists=$(node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const refs = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/tag-refs.json`, 'utf8'));
+          console.log(refs.some(ref => ref.ref === `refs/tags/${process.env.RELEASE_TAG}`) ? 'yes' : 'no');
+          NODE
+          )
+          if [ "$tag_exists" = yes ]; then
+            tagged_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')
+            if [ "$tagged_commit" != "$GITHUB_SHA" ]; then
+              echo 'The tag already identifies another commit; choose an unused alpha version.' >&2
+              exit 1
+            fi
+          fi
+
+          # Listing includes drafts, while release-by-tag may omit unpublished drafts.
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          release_id=$(node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const releases = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/releases.json`, 'utf8')).flat();
+          const matches = releases.filter(release => release.tag_name === process.env.RELEASE_TAG);
+          if (matches.length > 1) throw new Error('Multiple releases use this tag.');
+          if (matches.length === 1 && matches[0].draft !== true) {
+            throw new Error('Refusing to replace an already published release.');
+          }
+          if (matches.length === 1) console.log(matches[0].id);
+          NODE
+          )
+
+          if [ -z "$release_id" ]; then
+            release_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="Pocket Finance $RELEASE_TAG — Android test APK" \
+              -F draft=true -F prerelease=true -F body=@release.md --jq '.id')
+          else
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -f target_commitish="$GITHUB_SHA" -F draft=true -F prerelease=true \
+              -F body=@release.md > "$RUNNER_TEMP/release-updated.json"
+          fi
+
+          gh release upload "$RELEASE_TAG" \
+            pocket-finance-public-arm64-debug.apk SHA256SUMS BUILDINFO.json \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+          # Verify the bytes served by GitHub before making the draft public.
+          verification_dir="$RUNNER_TEMP/remote-apk-verification"
+          mkdir -p "$verification_dir"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern pocket-finance-public-arm64-debug.apk \
+            --pattern SHA256SUMS --pattern BUILDINFO.json --dir "$verification_dir"
+          cmp SHA256SUMS "$verification_dir/SHA256SUMS"
+          cmp BUILDINFO.json "$verification_dir/BUILDINFO.json"
+          (cd "$verification_dir" && sha256sum -c SHA256SUMS)
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$RUNNER_TEMP/release-before-publish.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/release-before-publish.json`, 'utf8'));
+          if (release.draft !== true || release.target_commitish !== process.env.GITHUB_SHA || release.tag_name !== process.env.RELEASE_TAG) {
+            throw new Error('Release state changed before publication; refusing to publish.');
+          }
+          NODE
+
+          release_url=$(gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -F prerelease=true -f make_latest=false --jq '.html_url')
+          printf 'Published test prerelease: %s\n\n' "$release_url" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Source commit: `%s`\n\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
