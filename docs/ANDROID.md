@@ -29,6 +29,10 @@ If publication fails after a successful build, rerun the workflow with the same
 tag and `artifact_run_id` set to that run's numeric ID (within its seven-day
 artifact retention). The workflow validates the source run and artifact metadata,
 then publishes those exact bytes without rebuilding or changing the signing key.
+If GitHub denies release-metadata edits to the workflow token, a maintainer can
+prepare the matching draft (tag, source commit and exact `release.md` notes), then
+select `upload_only` together with `artifact_run_id`. That mode uploads and verifies
+the assets while leaving the prepared draft for the maintainer to publish.
 
 ## Toolchain
 

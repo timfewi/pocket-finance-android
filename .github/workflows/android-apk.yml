@@ -12,6 +12,11 @@ on:
         required: false
         default: ''
         type: string
+      upload_only:
+        description: 'Upload and verify assets in an already prepared draft; leave publication to the maintainer'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -92,6 +97,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.release_tag }}
       ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id || github.run_id }}
+      UPLOAD_ONLY: ${{ inputs.upload_only }}
     steps:
       - name: Validate source workflow and successful build job
         shell: bash
@@ -146,6 +152,7 @@ jobs:
           sha256sum -c SHA256SUMS
 
           # Never repoint an existing tag to a different source commit.
+          echo 'Checking release tag references.'
           gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" > "$RUNNER_TEMP/tag-refs.json"
           tag_exists=$(node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
@@ -154,6 +161,7 @@ jobs:
           NODE
           )
           if [ "$tag_exists" = yes ]; then
+            echo 'Resolving the existing release tag.'
             tagged_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')
             if [ "$tagged_commit" != "$SOURCE_COMMIT" ]; then
               echo 'The tag already identifies another commit; choose an unused alpha version.' >&2
@@ -162,6 +170,7 @@ jobs:
           fi
 
           # Listing includes drafts, while release-by-tag may omit unpublished drafts.
+          echo 'Checking existing release metadata.'
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
           release_id=$(node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
@@ -171,27 +180,38 @@ jobs:
           if (matches.length === 1 && matches[0].draft !== true) {
             throw new Error('Refusing to replace an already published release.');
           }
+          if (process.env.UPLOAD_ONLY === 'true' && (matches.length !== 1 ||
+              matches[0].target_commitish !== process.env.SOURCE_COMMIT ||
+              matches[0].body !== readFileSync('release.md', 'utf8'))) {
+            throw new Error('Upload-only mode requires an existing draft with the exact source commit and release notes.');
+          }
           if (matches.length === 1) console.log(matches[0].id);
           NODE
           )
 
-          if [ -z "$release_id" ]; then
+          if [ "$UPLOAD_ONLY" = true ]; then
+            echo 'Prepared draft validated; upload-only mode skips release metadata changes.'
+          elif [ -z "$release_id" ]; then
+            echo 'Creating the release draft.'
             release_id=$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
               -f tag_name="$RELEASE_TAG" -f target_commitish="$SOURCE_COMMIT" \
               -f name="Pocket Finance $RELEASE_TAG — Android test APK" \
               -F draft=true -F prerelease=true -F body=@release.md --jq '.id')
           else
+            echo 'Updating release draft metadata.'
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
               -f tag_name="$RELEASE_TAG" -f target_commitish="$SOURCE_COMMIT" \
               -F draft=true -F prerelease=true \
               -F body=@release.md > "$RUNNER_TEMP/release-updated.json"
           fi
 
+          echo 'Uploading public APK, checksum, and provenance.'
           gh release upload "$RELEASE_TAG" \
             pocket-finance-public-arm64-debug.apk SHA256SUMS BUILDINFO.json \
             --repo "$GITHUB_REPOSITORY" --clobber
 
           # Verify the bytes served by GitHub before making the draft public.
+          echo 'Downloading release assets to verify the uploaded bytes.'
           verification_dir="$RUNNER_TEMP/remote-apk-verification"
           mkdir -p "$verification_dir"
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
@@ -201,6 +221,7 @@ jobs:
           cmp BUILDINFO.json "$verification_dir/BUILDINFO.json"
           (cd "$verification_dir" && sha256sum -c SHA256SUMS)
 
+          echo 'Rechecking release state after upload.'
           gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$RUNNER_TEMP/release-before-publish.json"
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
@@ -208,8 +229,19 @@ jobs:
           if (release.draft !== true || release.target_commitish !== process.env.SOURCE_COMMIT || release.tag_name !== process.env.RELEASE_TAG) {
             throw new Error('Release state changed before publication; refusing to publish.');
           }
+          if (process.env.UPLOAD_ONLY === 'true' && release.body !== readFileSync('release.md', 'utf8')) {
+            throw new Error('Prepared draft notes changed during upload.');
+          }
           NODE
 
+          if [ "$UPLOAD_ONLY" = true ]; then
+            printf 'Uploaded and verified assets in draft release `%s` (ID `%s`). Publication remains pending.\n\n' "$RELEASE_TAG" "$release_id" >> "$GITHUB_STEP_SUMMARY"
+            printf 'Source commit: `%s`\n\n' "$SOURCE_COMMIT" >> "$GITHUB_STEP_SUMMARY"
+            cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo 'Publishing the verified prerelease.'
           release_url=$(gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
             -f tag_name="$RELEASE_TAG" -f target_commitish="$SOURCE_COMMIT" -F body=@release.md \
             -F draft=false -F prerelease=true -f make_latest=false --jq '.html_url')
